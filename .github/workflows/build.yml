@@ -1,0 +1,73 @@
+name: Build fixed Pool Aim Assist APK
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Download original app source
+        run: git clone --depth 1 https://github.com/abwahidmoto-beep/PoolAimAssist.git upstream
+
+      - name: Repair screen-sharing startup bug
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          root = Path('upstream/app/src/main/java/com/example/poolaimassist')
+          path = root / 'OverlayService.kt'
+          src = path.read_text(encoding='utf-8')
+          old = 'if (resultCode == -1 || resultData == null) {'
+          new = 'if (resultCode != android.app.Activity.RESULT_OK || resultData == null) {'
+          if src.count(old) != 1:
+              raise SystemExit('Upstream code changed; review before patching')
+          src = src.replace(old, new, 1)
+          src = src.replace('return START_STICKY', 'return START_NOT_STICKY', 1)
+          path.write_text(src, encoding='utf-8')
+
+          path = root / 'MainActivity.kt'
+          src = path.read_text(encoding='utf-8')
+          src = src.replace(
+              'statusText.text = "Running. Open your pool game now — a control bar will float over it."',
+              'statusText.text = "Starting Pool Aim Assist. Look for the floating controls."',
+              1,
+          )
+          path.write_text(src, encoding='utf-8')
+          print('Patched PoolAimAssist start-up bug')
+          PY
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up compatible Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK 34
+        run: sdkmanager "platforms;android-34" "build-tools;34.0.0" "platform-tools"
+
+      - name: Build debug APK
+        working-directory: upstream
+        run: |
+          printf 'sdk.dir=%s\n' "$ANDROID_HOME" > local.properties
+          gradle --no-daemon assembleDebug --stacktrace
+
+      - name: Upload APK for installation
+        uses: actions/upload-artifact@v4
+        with:
+          name: PoolAimAssist-fixed-debug-apk
+          path: upstream/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          
