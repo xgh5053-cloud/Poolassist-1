@@ -52,11 +52,13 @@ jobs:
         with:
           gradle-version: '8.7'
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Install Android SDK 34
-        run: sdkmanager "platforms;android-34" "build-tools;34.0.0" "platform-tools"
+      - name: Install Android SDK 34 using runner SDK
+        shell: bash
+        run: |
+          : "${ANDROID_HOME:?GitHub runner Android SDK is missing}"
+          SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | head -n 1)"
+          test -n "$SDKMANAGER" || { echo "sdkmanager not found"; exit 1; }
+          "$SDKMANAGER" --install "platforms;android-34" "build-tools;34.0.0" "platform-tools"
 
       - name: Build debug APK
         working-directory: upstream
@@ -70,4 +72,3 @@ jobs:
           name: PoolAimAssist-fixed-debug-apk
           path: upstream/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
-          
